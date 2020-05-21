@@ -3,7 +3,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::time::SystemTime;
 
-const CAP: usize = 256 * 1024;
+const CAP: usize = 64 * 1024;
 
 fn main() {
     let start_time = SystemTime::now();

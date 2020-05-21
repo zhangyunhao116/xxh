@@ -1,6 +1,3 @@
-#![crate_type = "lib"]
-#![crate_name = "xxh"]
-
 use std::convert::TryInto;
 use std::hash::Hasher;
 
@@ -300,13 +297,18 @@ mod tests {
 
     #[test]
     fn test_xxh64_digest() {
-        let mut digest = Xxh64::with_seed(1);
-        digest.write(b"1111111111111111111111111111111111111111");
-        digest.write(b"111");
-        digest.write(b"11111");
-        digest.write(b"1111111111111112");
+        fn digest_slice(bytes: &[u8]) -> u64 {
+            let mut digest = Xxh64::with_seed(10);
+            for i in bytes {
+                digest.write(&[*i,]);
+            }
+            digest.finish()
+        }
 
-        let result = digest.finish();
-        assert_eq!(result, xxh64_slice(b"1111111111111111111111111111111111111111111111111111111111111112", 1))
+        let mut test_bytes = vec![];
+        for i in 0..1000 {
+            test_bytes.push(i as u8);
+            assert_eq!(xxh64_slice(test_bytes.as_ref(), 10), digest_slice(test_bytes.as_ref()))
+        }
     }
 }
