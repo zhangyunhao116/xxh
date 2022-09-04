@@ -1,3 +1,4 @@
+use core::hash::BuildHasher;
 use std::convert::TryInto;
 use std::hash::Hasher;
 
@@ -131,12 +132,18 @@ impl Xxh64 {
         } else {
             // Need to consume extra bytes.
             let mut accs = (self.acc1, self.acc2, self.acc3, self.acc4);
-            self.buffer.0[self.buffer_len..].copy_from_slice(&bytes[..STRIPE_LEN_32 - self.buffer_len]);
+            self.buffer.0[self.buffer_len..]
+                .copy_from_slice(&bytes[..STRIPE_LEN_32 - self.buffer_len]);
             accs = Xxh64::process_stripe(accs, self.buffer.0);
             let mut bytes_consumed = 32 - self.buffer_len;
             let mut new_buffer_len = bytes.len() + self.buffer_len - 32;
             while new_buffer_len >= 32 {
-                accs = Xxh64::process_stripe(accs, bytes[bytes_consumed..bytes_consumed + 32].try_into().expect("incorrect length"));
+                accs = Xxh64::process_stripe(
+                    accs,
+                    bytes[bytes_consumed..bytes_consumed + 32]
+                        .try_into()
+                        .expect("incorrect length"),
+                );
                 bytes_consumed += 32;
                 new_buffer_len -= 32;
             }
@@ -155,7 +162,8 @@ impl Xxh64 {
         let mut slice = &self.buffer.0[..self.buffer_len];
         let mut acc;
         if self.input_len >= STRIPE_LEN_32 {
-            acc = self.acc1
+            acc = self
+                .acc1
                 .rotate_left(1)
                 .wrapping_add(self.acc2.rotate_left(7))
                 .wrapping_add(self.acc3.rotate_left(12))
@@ -202,7 +210,10 @@ impl Xxh64 {
     }
 
     #[inline(always)]
-    fn process_stripe(mut accs: (u64, u64, u64, u64), slice: [u8; STRIPE_LEN_32]) -> (u64, u64, u64, u64) {
+    fn process_stripe(
+        mut accs: (u64, u64, u64, u64),
+        slice: [u8; STRIPE_LEN_32],
+    ) -> (u64, u64, u64, u64) {
         // Step 2. Process stripes
         // Each lane read its associated 64-bit value using little-endian convention.
         accs.0 = round(
@@ -232,6 +243,15 @@ impl Hasher for Xxh64 {
 
     fn write(&mut self, bytes: &[u8]) {
         self.write(bytes);
+    }
+}
+
+impl BuildHasher for Xxh64 {
+    type Hasher = Xxh64;
+
+    #[inline(always)]
+    fn build_hasher(&self) -> Self::Hasher {
+        Xxh64::with_seed(0)
     }
 }
 
@@ -269,7 +289,6 @@ fn merge_accumulator(mut acc: u64, acc_n: u64) -> u64 {
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
-    use std::hash::BuildHasherDefault;
 
     use super::*;
 
@@ -287,12 +306,14 @@ mod tests {
         assert_eq!(
             6256723559432292107,
             xxh64_slice(
-                b"01234567890123456789012345678901234567890123456789012345678901234567890123456789", 0)
+                b"01234567890123456789012345678901234567890123456789012345678901234567890123456789",
+                0
+            )
         );
 
-        let mut hash: HashMap<_, _, BuildHasherDefault<Xxh64>> = Default::default();
-        hash.insert("key", "value");
-        assert_eq!(hash.get("key"), Some(&"value"));
+        let s = Xxh64::default();
+        let mut map = HashMap::with_capacity_and_hasher(10, s);
+        map.insert("qwer", 1);
     }
 
     #[test]
@@ -300,7 +321,7 @@ mod tests {
         fn digest_slice(bytes: &[u8]) -> u64 {
             let mut digest = Xxh64::with_seed(10);
             for i in bytes {
-                digest.write(&[*i,]);
+                digest.write(&[*i]);
             }
             digest.finish()
         }
@@ -308,7 +329,10 @@ mod tests {
         let mut test_bytes = vec![];
         for i in 0..1000 {
             test_bytes.push(i as u8);
-            assert_eq!(xxh64_slice(test_bytes.as_ref(), 10), digest_slice(test_bytes.as_ref()))
+            assert_eq!(
+                xxh64_slice(test_bytes.as_ref(), 10),
+                digest_slice(test_bytes.as_ref())
+            )
         }
     }
 }
